@@ -9,10 +9,21 @@ printf("Julho/2018 - Universidade Federal do ABC\n");
 
 printf("\n");
 
+WIDTH = 100;
+HEIGHT = 100;
+
+clf();
+a = gca();
+//a.data_bounds = [minX, minY; maxX, maxY];
+a.data_bounds = [0, 0; WIDTH, HEIGHT];
+a.auto_scale = "off";
+
 filename = input("Digite o nome do arquivo: ", "string");
 
 pAspectRatio = input("Digite o aspect ratio: ");
 pFovy = (input("Digite o campo de visão (em graus): ") * %pi) / 180;
+
+disp(pFovy);
 
 vEye = [input("Digite a posição X da câmera: ") input("Digite a posição Y da câmera: ") input("Digite a posição Z da câmera: ")];
 
@@ -87,13 +98,25 @@ for i = 1:lineCount
         trigV2 = cat(2, vertexAt(vertices, vert2), 1.0) * mvpMatrix;
         trigV3 = cat(2, vertexAt(vertices, vert3), 1.0) * mvpMatrix;
 
+        // convertendo pra normalized device coordinates
+        trigV1_ndc = trigV1 / trigV1(4);
+        trigV2_ndc = trigV2 / trigV2(4);
+        trigV3_ndc = trigV3 / trigV3(4);
+
+        // convertendo para window space
+        trigV1_ws = [((WIDTH/2)*trigV1_ndc(1) + trigV1(1) + WIDTH/2) ((HEIGHT/2)*trigV1_ndc(2) + trigV1(2) + HEIGHT/2)];
+        trigV2_ws = [((WIDTH/2)*trigV2_ndc(1) + trigV2(1) + WIDTH/2) ((HEIGHT/2)*trigV2_ndc(2) + trigV2(2) + HEIGHT/2)];
+        trigV3_ws = [((WIDTH/2)*trigV3_ndc(1) + trigV3(1) + WIDTH/2) ((HEIGHT/2)*trigV3_ndc(2) + trigV3(2) + HEIGHT/2)];
+
         //xs = [vertexAt(vertices, vert1)(1) vertexAt(vertices, vert2)(1) vertexAt(vertices, vert3)(1) vertexAt(vertices, vert1)(1)];
         //ys = [vertexAt(vertices, vert1)(2) vertexAt(vertices, vert2)(2) vertexAt(vertices, vert3)(2) vertexAt(vertices, vert1)(2)];
         //zs = [vertexAt(vertices, vert1)(3) vertexAt(vertices, vert2)(3) vertexAt(vertices, vert3)(3) vertexAt(vertices, vert1)(3)];
 
-        xs = [trigV1(1) trigV2(1) trigV3(1) trigV1(1)];
-        ys = [trigV1(2) trigV2(2) trigV3(2) trigV1(2)];        
-//        xsegs(xs, ys, zs);
+//        xs = [trigV1(1) trigV2(1) trigV3(1) trigV1(1)];
+//        ys = [trigV1(2) trigV2(2) trigV3(2) trigV1(2)];        
+
+        xs = [trigV1_ws(1) trigV2_ws(1) trigV3_ws(1) trigV1_ws(1)];
+        ys = [trigV1_ws(2) trigV2_ws(2) trigV3_ws(2) trigV1_ws(2)];        
 
         mx = min(xs);
         my = min(ys);
@@ -127,9 +150,6 @@ end
 //     plotY = cat(2, plotY, [indexedVertices(i+1)]);
 //     plotZ = cat(2, plotZ, [indexedVertices(i+2)]);
 // end
-
-a = gca();
-a.data_bounds = [minX, minY; maxX, maxY];
 
 printf("Total de vertices: %i\n", length(indexedVertices));
 printf("Total de triangulos: %i\n", totalTriangles);
