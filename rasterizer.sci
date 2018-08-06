@@ -23,8 +23,6 @@ filename = input("Digite o nome do arquivo: ", "string");
 pAspectRatio = input("Digite o aspect ratio: ");
 pFovy = (input("Digite o campo de visão (em graus): ") * %pi) / 180;
 
-disp(pFovy);
-
 vEye = [input("Digite a posição X da câmera: ") input("Digite a posição Y da câmera: ") input("Digite a posição Z da câmera: ")];
 
 vCenter = [input("Digite a posição X do alvo: ") input("Digite a posição Y do alvo: ") input("Digite a posição Z do alvo: ")];
