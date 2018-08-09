@@ -1,153 +1,124 @@
 clear; clc;
 
-exec('matrix_math.sci');
+exec("matrix_math.sci");
+exec("objLoad.sci");
 
-printf("Visualizador de Modelos .obj\n");
-printf("Por Eduardo Renesto Estanquiere\n");
-printf("Projeto final de BCC\n");
-printf("Julho/2018 - Universidade Federal do ABC\n");
+// Ask these to the user
+filename = "suzanne.obj";
+width = 600;
+height = 600;
+zNear = 0.0001;
+zFar = 10000.0;
+fovy = %pi/4;
+camera = [0 0 -3];
+model = [0 0 0];
 
-printf("\n");
+projectionMatrix = perspective(fovy, width/height,  zNear, zFar);
+viewMatrix = lookAt(camera, model, [0.0 1.0 0.0]);
 
-WIDTH = 100;
-HEIGHT = 100;
+mvp = (projectionMatrix' * viewMatrix')';
 
-clf();
-a = gca();
-//a.data_bounds = [minX, minY; maxX, maxY];
-a.data_bounds = [0, 0; WIDTH, HEIGHT];
-a.auto_scale = "off";
+[positions, normals, triangles] = loadObj(filename);
 
-filename = input("Digite o nome do arquivo: ", "string");
+// ]----- RASTERIZADOR -----[
+clearR = 0;
+clearG = 0;
+clearB = 0;
+frame = ones(width, height) * color(clearR, clearG, clearB);
+depthBuffer = ones(width, height) * -%inf;
+source = [0 0 -1];
 
-pAspectRatio = input("Digite o aspect ratio: ");
-pFovy = (input("Digite o campo de visão (em graus): ") * %pi) / 180;
+objectColor = [0.188 0.082 0.082];
 
-vEye = [input("Digite a posição X da câmera: ") input("Digite a posição Y da câmera: ") input("Digite a posição Z da câmera: ")];
+lightPosition = [3 3 3];
+lightIntensity = 2;
+lightColor = [1 1 1];
 
-vCenter = [input("Digite a posição X do alvo: ") input("Digite a posição Y do alvo: ") input("Digite a posição Z do alvo: ")];
-
-viewMatrix = lookAt(vEye, vCenter, [0.0 1.0 0.0]);
-projectionMatrix = perspective(pFovy, pAspectRatio, 0.001, 10000.0);
-
-mvpMatrix = (projectionMatrix' * viewMatrix')'; // sem model matrix por enquanto
-
-lines = mgetl(filename);
-lineCount = length(length(lines));
-
-vertices = [];
-
-indexedVertices = [];
-
-totalTriangles = 0;
-
-minX = +%inf;
-minY = +%inf;
-maxX = -%inf;
-maxY = -%inf;
-
-trigXs = [];
-trigYs = [];
-
-function[vert] = vertexAt(arr, n)
-    x = arr(((n - 1) * 3) + 1);
-    y = arr(((n - 1) * 3) + 2);
-    z = arr(((n - 1) * 3) + 3);
-
-    vert = [x y z];
+function[dist] = edgeFunction(v1, v2, point)
+    dist = ((point(1) - v1(1)) * (v2(2) - v1(2)) - (point(2) - v1(2)) * (v2(1) - v1(1)));
+    //dist = ((v1(1) - v2(1)) * (point(2) - v1(2))) - ((v1(2) - v2(2)) * (point(1) - v1(1)));
 endfunction
 
-for i = 1:lineCount
-    if strindex(lines(i), "v ") == 1 then
-        // strtok precisa ser chamado várias vezes:
-        // a primeira vez define a string básica
-        // as outras pegam os tokens
+for i=1:size(triangles)(1) // triangles
+    v1 = [positions(triangles(i, 1), :) 1.0];
+    n1 = normals(triangles(i, 4), :);
+    
+    v2 = [positions(triangles(i, 2), :) 1.0];
+    n2 = normals(triangles(i, 5), :);
+    
+    v3 = [positions(triangles(i, 3), :) 1.0];
+    n3 = normals(triangles(i, 6), :);
 
-        strtok(lines(i), " ");
-        x = strtod(strtok(" "));
-        y = strtod(strtok(" "));
-        z = strtod(strtok(" "));
+    // convertendo para clip space
+    cv1 = v1 * mvp;
+    cv2 = v2 * mvp;
+    cv3 = v3 * mvp;
 
-        vertices = cat(2, vertices, [x y z]);
-        //vertices = cat(2, vertices, [x y z 1.0] * mvpMatrix);
+    // convertendo para NDC
+    ndcv1 = cv1 / cv1(4);
+    ndcv2 = cv2 / cv2(4);
+    ndcv3 = cv3 / cv3(4);
+
+    // convertendo para window space
+    wsv1 = [((width/2)*ndcv1(1) + v1(1) + width/2) ((height/2)*ndcv1(2) + v1(2) + height/2) ((zFar-zNear)/2)*ndcv1(3) + ((zFar+zNear)/2)];
+    wsv2 = [((width/2)*ndcv2(1) + v2(1) + width/2) ((height/2)*ndcv2(2) + v2(2) + height/2) ((zFar-zNear)/2)*ndcv2(3) + ((zFar+zNear)/2)];
+    wsv3 = [((width/2)*ndcv3(1) + v3(1) + width/2) ((height/2)*ndcv3(2) + v3(2) + height/2) ((zFar-zNear)/2)*ndcv3(3) + ((zFar+zNear)/2)];
+
+    minX = floor(min(wsv1(1), wsv2(1), wsv3(1)));
+    maxX = floor(max(wsv1(1), wsv2(1), wsv3(1)));
+    minY = floor(min(wsv1(2), wsv2(2), wsv3(2)));
+    maxY = floor(max(wsv1(2), wsv2(2), wsv3(2)));
+
+    if(minX < 0 | minY < 0 | maxX > width | maxX > height)
+        continue;
     end
 
-    if strindex(lines(i), "f ") == 1 then
-        strtok(lines(i), " ");
-        str1 = strtok(" ");
-        str2 = strtok(" ");
-        str3 = strtok(" ");
+//    xpoly([wsv1(1) wsv2(1) wsv3(1) wsv1(1)], [wsv1(2) wsv2(2) wsv3(2) wsv1(2)]);
 
-        // por enquanto, ignoramos as normais e as coordenadas de texturas
-        vert1 = strtod(strtok(str1, "/"));
-        //vert1 = strtod(strtok("/"));
+    for x=minX:maxX
+        for y=minY:maxY
+            area = edgeFunction(wsv1, wsv2, wsv3);
+            w0 = edgeFunction(wsv2, wsv3, [x y]);
+            w1 = edgeFunction(wsv3, wsv1, [x y]);
+            w2 = edgeFunction(wsv1, wsv2, [x y]);
 
-        vert2 = strtod(strtok(str2, "/"));
-        //vert2 = strtod(strtok("/"));
+            if ((w0 >= 0 & w1 >= 0 & w2 >= 0) | (w0 <= 0 & w1 <= 0 & w2 <= 0)) then
+                w0 = w0/area;
+                w1 = w1/area;
+                w2 = w2/area;
 
-        vert3 = strtod(strtok(str3, "/"));
-        //vert3 = strtod(strtok("/"));
+                depth = (w0 * wsv1(3)) + (w1 * wsv2(3)) + (w2 * wsv3(3));
 
-        newVerts = [vertexAt(vertices, vert1) vertexAt(vertices, vert2) vertexAt(vertices, vert3)];
-        
-        indexedVertices = cat(2, indexedVertices, newVerts);
+                if depthBuffer(x, y) < depth then
+                    depthBuffer(x, y) = depth;
 
-        trigV1 = cat(2, vertexAt(vertices, vert1), 1.0) * mvpMatrix;
-        trigV2 = cat(2, vertexAt(vertices, vert2), 1.0) * mvpMatrix;
-        trigV3 = cat(2, vertexAt(vertices, vert3), 1.0) * mvpMatrix;
+                    iPos = (w0 * v1) + (w1 * v2) + (w2 * v3);
+                    iNormal = (w0 * n1) + (w1 * n2) + (w2 * n3);
 
-        // convertendo pra normalized device coordinates
-        trigV1_ndc = trigV1 / trigV1(4);
-        trigV2_ndc = trigV2 / trigV2(4);
-        trigV3_ndc = trigV3 / trigV3(4);
+                    lNorm = normalize(iNormal);
+                    lightDir = normalize(lightPosition - iPos(:, 1:3));
 
-        // convertendo para window space
-        trigV1_ws = [((WIDTH/2)*trigV1_ndc(1) + trigV1(1) + WIDTH/2) ((HEIGHT/2)*trigV1_ndc(2) + trigV1(2) + HEIGHT/2)];
-        trigV2_ws = [((WIDTH/2)*trigV2_ndc(1) + trigV2(1) + WIDTH/2) ((HEIGHT/2)*trigV2_ndc(2) + trigV2(2) + HEIGHT/2)];
-        trigV3_ws = [((WIDTH/2)*trigV3_ndc(1) + trigV3(1) + WIDTH/2) ((HEIGHT/2)*trigV3_ndc(2) + trigV3(2) + HEIGHT/2)];
+                    diff = max(dot(lNorm, lightDir), 0.0);
+                    diffuse = diff * lightColor * lightIntensity;
+    
+                    result = diffuse .* objectColor;
+                    result = round(result * 255);
 
-        //xs = [vertexAt(vertices, vert1)(1) vertexAt(vertices, vert2)(1) vertexAt(vertices, vert3)(1) vertexAt(vertices, vert1)(1)];
-        //ys = [vertexAt(vertices, vert1)(2) vertexAt(vertices, vert2)(2) vertexAt(vertices, vert3)(2) vertexAt(vertices, vert1)(2)];
-        //zs = [vertexAt(vertices, vert1)(3) vertexAt(vertices, vert2)(3) vertexAt(vertices, vert3)(3) vertexAt(vertices, vert1)(3)];
+                    //frame(x, y) = color(round(abs(iNormal)(1) * 255), round(abs(iNormal)(2)) * 255, round(abs(iNormal)(3) * 255));
+                    frame(x, y) = color(result(1), result(2), result(3));
+                end
+            end    
 
-//        xs = [trigV1(1) trigV2(1) trigV3(1) trigV1(1)];
-//        ys = [trigV1(2) trigV2(2) trigV3(2) trigV1(2)];        
-
-        xs = [trigV1_ws(1) trigV2_ws(1) trigV3_ws(1) trigV1_ws(1)];
-        ys = [trigV1_ws(2) trigV2_ws(2) trigV3_ws(2) trigV1_ws(2)];        
-
-        mx = min(xs);
-        my = min(ys);
-        Mx = max(xs);
-        My = max(ys);
-
-        if(mx < minX)
-            minX = mx;
+            clear area;
+            clear w0;
+            clear w1;
+            clear w2;
         end
-        if(my < minY)
-            minY = my;
-        end
-        if(Mx > maxX)
-            maxX = Mx;
-        end
-        if(My > maxY)
-            maxY = My;
-        end
-
-        xpoly(xs, ys);
-        totalTriangles = totalTriangles + 1;
     end
+    clear v1; clear v2; clear v3;
+    clear cv1; clear cv2; clear cv3;
+    clear ndcv1; clear ndcv2; clear ndcv3;
+    clear wsv1; clear wsv2; clear wsv3;
 end
 
-// plotX = [];
-// plotY = [];
-// plotZ = [];
-// 
-// for i=1:3:(length(indexedVertices) / 3)
-//     plotX = cat(2, plotX, [indexedVertices(i)]);
-//     plotY = cat(2, plotY, [indexedVertices(i+1)]);
-//     plotZ = cat(2, plotZ, [indexedVertices(i+2)]);
-// end
-
-printf("Total de vertices: %i\n", length(indexedVertices));
-printf("Total de triangulos: %i\n", totalTriangles);
+Matplot(frame'($:-1:1, :));
