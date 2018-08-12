@@ -4,14 +4,14 @@ exec("matrix_math.sci");
 exec("objLoad.sci");
 
 // Ask these to the user
-filename = "suzanne.obj";
-width = 600;
-height = 600;
+filename = input("Digite o arquivo a ser carregado: ", "string");
+width = 400;
+height = 400;
 zNear = 0.0001;
 zFar = 10000.0;
 fovy = %pi/4;
-camera = [0 0 -3];
-model = [0 0 0];
+camera = input("Digite a posicao da camera ([x y z]): ");
+model = input("Digite o foco da camera ([x y z]): ");
 
 projectionMatrix = perspective(fovy, width/height,  zNear, zFar);
 viewMatrix = lookAt(camera, model, [0.0 1.0 0.0]);
@@ -28,11 +28,12 @@ frame = ones(width, height) * color(clearR, clearG, clearB);
 depthBuffer = ones(width, height) * -%inf;
 source = [0 0 -1];
 
-objectColor = [0.188 0.082 0.082];
+//objectColor = [0.188 0.082 0.082];
+objectColor = input("Digite a cor do objeto ([r g b]), com r, g, b em [0, 1]: ");
 
-lightPosition = [3 3 3];
-lightIntensity = 2;
-lightColor = [1 1 1];
+lightPosition = input("Digite a posicao da luz ([x y z]): ");
+lightIntensity = input("Digite a intensidade da luz: ");
+lightColor = input("Digite a cor da luz ([r g b]), com r, g, b em [0, 1]: ");
 
 function[dist] = edgeFunction(v1, v2, point)
     dist = ((point(1) - v1(1)) * (v2(2) - v1(2)) - (point(2) - v1(2)) * (v2(1) - v1(1)));
@@ -69,7 +70,7 @@ for i=1:size(triangles)(1) // triangles
     minY = floor(min(wsv1(2), wsv2(2), wsv3(2)));
     maxY = floor(max(wsv1(2), wsv2(2), wsv3(2)));
 
-    if(minX < 0 | minY < 0 | maxX > width | maxX > height)
+    if(minX < 0 | minY < 0 | maxX > width | maxY > height)
         continue;
     end
 
